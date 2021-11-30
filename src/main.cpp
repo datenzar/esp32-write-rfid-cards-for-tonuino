@@ -11,7 +11,7 @@
 
 MFRC522 mfrc522(SS_PIN, RST_PIN); // Create MFRC522 instance.
 
-MFRC522::MIFARE_Key key_a, key_b;
+MFRC522::MIFARE_Key key;
 
 // pre define methods
 void dump_byte_array(byte *buffer, byte bufferSize);
@@ -32,76 +32,34 @@ void setup()
 	delay(4);							// Optional delay. Some board do need more time after init to be ready, see Readme
 	self_test();
 
-	// Prepare the key A (using 000000000000h) and key B (using FFFFFFFFFFFFh)
-	// which is the default at chip delivery from the factory
+	// Prepare the key (used both as key A and as key B)
+	// using FFFFFFFFFFFFh which is the default at chip delivery from the factory
 	for (byte i = 0; i < 6; i++)
 	{
-		key_a.keyByte[i] = 0x00;
-		key_b.keyByte[i] = 0xFF;
+		key.keyByte[i] = 0xFF;
 	}
 
 	Serial.println(F("Scan a MIFARE Classic PICC to demonstrate Value Block mode."));
-	Serial.print(F("Using key A):"));
-	dump_byte_array(key_a.keyByte, MFRC522::MF_KEY_SIZE);
-	Serial.println();
-	Serial.print(F("Using key B):"));
-	dump_byte_array(key_b.keyByte, MFRC522::MF_KEY_SIZE);
+	Serial.print(F("Using key (for A and B):"));
+	dump_byte_array(key.keyByte, MFRC522::MF_KEY_SIZE);
 	Serial.println();
 
 	Serial.println(F("BEWARE: Data will be written to the PICC, in sector #1"));
 }
 
 /**
- * Main loop looking for card presence
+ * Main loop.
  */
 void loop()
 {
 	// Reset the loop if no new card present on the sensor/reader. This saves the entire process when idle.
 	if (!mfrc522.PICC_IsNewCardPresent())
-	{
 		return;
-	}
 
 	// Select one of the cards
 	if (!mfrc522.PICC_ReadCardSerial())
-	{
 		return;
-	}
 
-	// Dump debug info about the card; PICC_HaltA() is automatically called
-	mfrc522.PICC_DumpToSerial(&(mfrc522.uid));
-
-	write_card();
-}
-
-/**
- * Perform a quick self test to ensure the reader is working properly
- */
-void self_test()
-{
-	Serial.println(F("*****************************"));
-	Serial.println(F("MFRC522 Digital self test"));
-	Serial.println(F("*****************************"));
-	mfrc522.PCD_DumpVersionToSerial(); // Show version of PCD - MFRC522 Card Reader
-	Serial.println(F("-----------------------------"));
-	Serial.println(F("Only known versions supported"));
-	Serial.println(F("-----------------------------"));
-	Serial.println(F("Performing test..."));
-	bool result = mfrc522.PCD_PerformSelfTest(); // perform the test
-	Serial.println(F("-----------------------------"));
-	Serial.print(F("Result: "));
-	if (result)
-		Serial.println(F("OK"));
-	else
-		Serial.println(F("DEFECT or UNKNOWN"));
-	Serial.println();
-}
-
-/**
- * Update card with values
- */
-void write_card()
-{
 	// Show some details of the PICC (that is: the tag/card)
 	Serial.print(F("Card UID:"));
 	dump_byte_array(mfrc522.uid.uidByte, mfrc522.uid.size);
@@ -117,6 +75,7 @@ void write_card()
 		return;
 	}
 
+	// In this sample we use the second sector,
 	// that is: sector #1, covering block #4 up to and including block #7
 	byte sector = 1;
 	byte valueBlockA = 5;
@@ -129,7 +88,7 @@ void write_card()
 
 	// Authenticate using key A
 	Serial.println(F("Authenticating using key A..."));
-	status = mfrc522.PCD_Authenticate(MFRC522::PICC_CMD_MF_AUTH_KEY_A, trailerBlock, &key_a, &(mfrc522.uid));
+	status = mfrc522.PCD_Authenticate(MFRC522::PICC_CMD_MF_AUTH_KEY_A, trailerBlock, &key, &(mfrc522.uid));
 	if (status != MFRC522::STATUS_OK)
 	{
 		Serial.print(F("PCD_Authenticate() failed: "));
@@ -139,7 +98,7 @@ void write_card()
 
 	// Show the whole sector as it currently is
 	Serial.println(F("Current data in sector:"));
-	mfrc522.PICC_DumpMifareClassicSectorToSerial(&(mfrc522.uid), &key_a, sector);
+	mfrc522.PICC_DumpMifareClassicSectorToSerial(&(mfrc522.uid), &key, sector);
 	Serial.println();
 
 	// We need a sector trailer that defines blocks 5 and 6 as Value Blocks and enables key B
@@ -209,7 +168,7 @@ void write_card()
 
 	// Authenticate using key B
 	Serial.println(F("Authenticating again using key B..."));
-	status = mfrc522.PCD_Authenticate(MFRC522::PICC_CMD_MF_AUTH_KEY_B, trailerBlock, &key_b, &(mfrc522.uid));
+	status = mfrc522.PCD_Authenticate(MFRC522::PICC_CMD_MF_AUTH_KEY_B, trailerBlock, &key, &(mfrc522.uid));
 	if (status != MFRC522::STATUS_OK)
 	{
 		Serial.print(F("PCD_Authenticate() failed: "));
@@ -297,13 +256,36 @@ void write_card()
 	}
 
 	// Dump the sector data
-	mfrc522.PICC_DumpMifareClassicSectorToSerial(&(mfrc522.uid), &key_a, sector);
+	mfrc522.PICC_DumpMifareClassicSectorToSerial(&(mfrc522.uid), &key, sector);
 	Serial.println();
 
 	// Halt PICC
 	mfrc522.PICC_HaltA();
 	// Stop encryption on PCD
 	mfrc522.PCD_StopCrypto1();
+}
+
+/**
+ * Perform a quick self test to ensure the reader is working properly
+ */
+void self_test()
+{
+	Serial.println(F("*****************************"));
+	Serial.println(F("MFRC522 Digital self test"));
+	Serial.println(F("*****************************"));
+	mfrc522.PCD_DumpVersionToSerial(); // Show version of PCD - MFRC522 Card Reader
+	Serial.println(F("-----------------------------"));
+	Serial.println(F("Only known versions supported"));
+	Serial.println(F("-----------------------------"));
+	Serial.println(F("Performing test..."));
+	bool result = mfrc522.PCD_PerformSelfTest(); // perform the test
+	Serial.println(F("-----------------------------"));
+	Serial.print(F("Result: "));
+	if (result)
+		Serial.println(F("OK"));
+	else
+		Serial.println(F("DEFECT or UNKNOWN"));
+	Serial.println();
 }
 
 /**
